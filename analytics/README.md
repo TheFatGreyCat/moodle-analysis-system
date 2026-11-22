@@ -26,6 +26,21 @@ Run the acceptance test suite:
 python3 -m unittest discover -s analytics -p 'test_*.py'
 ```
 
+## Submission and Gradebook Report
+
+Use the snapshot ID printed by the importer. Run from the repository root in the same environment:
+
+```bash
+python3 -m analytics.report_snapshot /path/to/private-analytics/course.duckdb \
+  --snapshot-id "$SNAPSHOT_ID" --pass-percent 60
+```
+
+The CLI opens DuckDB read-only and prints aggregate JSON to stdout. It does not export a new file, include learner IDs, or contact Moodle, Ollama, or any external service. Keep redirected output in a private directory; activity names and small-group aggregates can still be sensitive.
+
+- **Observed submission share:** distinct learners with `attempt_submitted` (Quiz) or `assessable_submitted` (Assignment) divided by the size of the snapshot's exported cohort. Repeat attempts count once. This is evidence from the retained log window `[from, to)`, not the proportion of learners eligible for a specific activity and not proof that anyone without an event failed to submit. Without Standard Log, the observed count and share are `null`; an empty cohort also has no share.
+- **Gradebook pass rate:** evaluated separately for each numeric Quiz/Assignment grade item using its current stored grade. The threshold is `min_grade + (max_grade - min_grade) * pass_percent / 100`, inclusive; this is an analyst-supplied threshold, not Moodle's grade-to-pass setting. The denominator is learners with a non-null grade; zero is a real grade. Stale items, unsupported scales/ranges and items with no grades return `null` with a `pass_status`. Rates are fractions from `0` to `1`.
+- Gradebook metrics use the snapshot's current stored grades, not grades at the end of the log window or grades from the first attempt. Every query is scoped to the explicit snapshot ID.
+
 ## DuckDB Schema and Table Grains
 
 Every table is keyed and scoped by `snapshot_id` so multiple point-in-time exports can coexist in the same database without overwriting prior observations:
