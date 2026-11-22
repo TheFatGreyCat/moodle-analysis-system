@@ -1,0 +1,12 @@
+{
+  "name": "moodle-local-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun ./server.ts"
+  },
+  "dependencies": {
+    "react": "19.2.9",
+    "react-dom": "19.2.9"
+  }
+}

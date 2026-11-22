@@ -41,6 +41,31 @@ The CLI opens DuckDB read-only and prints aggregate JSON to stdout. It does not 
 - **Gradebook pass rate:** evaluated separately for each numeric Quiz/Assignment grade item using its current stored grade. The threshold is `min_grade + (max_grade - min_grade) * pass_percent / 100`, inclusive; this is an analyst-supplied threshold, not Moodle's grade-to-pass setting. The denominator is learners with a non-null grade; zero is a real grade. Stale items, unsupported scales/ranges and items with no grades return `null` with a `pass_status`. Rates are fractions from `0` to `1`.
 - Gradebook metrics use the snapshot's current stored grades, not grades at the end of the log window or grades from the first attempt. Every query is scoped to the explicit snapshot ID.
 
+## First-attempt prediction baseline
+
+Use two different course offerings of the same learning sequence, with disjoint learners and an earlier training cutoff than the test cutoff. **Capture** each feature snapshot before its scheduled target quiz opens; you may import the saved snapshot later. Save the unwrapped `local_quizexport_get_attempts` response objects for the corresponding target quiz in a JSON array per cohort; capture the training outcomes before the test cutoff. Use the Moodle quiz **instance IDs**, not course module IDs, and select equivalent prerequisite quizzes for both offerings.
+
+Run the evaluation locally with the existing DuckDB environment:
+
+```bash
+python3 -m analytics.predict_baseline /path/to/private-analytics/course.duckdb \
+  /path/to/private-analytics/experiment.json
+```
+
+Example `experiment.json` (replace snapshot IDs, Unix UTC cutoffs and Moodle IDs):
+
+```json
+{
+  "pass_percent": 60,
+  "train": {"snapshot_id": "<earlier SHA-256>", "cutoff": 1700010000, "target_quiz_id": 12, "prior_quiz_ids": [11], "labels": "train-quiz.json"},
+  "test": {"snapshot_id": "<later SHA-256>", "cutoff": 1700020000, "target_quiz_id": 22, "prior_quiz_ids": [21], "labels": "test-quiz.json"}
+}
+```
+
+Only explicitly selected prerequisite quiz grades are read from the pre-cutoff snapshots. The features are the mean normalized numeric grade and fraction of prerequisites with valid grades; missing history is represented separately from zero. Label `pass` means the mark observed for a finished and graded **attempt number 1** is at least the selected percentage of that attempt's maximum. Later attempts, missing exports, unfinished attempts and ungraded attempts are not substituted as labels.
+
+The CLI fits regularized logistic regression on labeled training rows, then prints aggregate test Brier score (lower is better) and accuracy at probability 0.5 alongside a training-prevalence baseline. It also reports unlabeled coverage and model scores with/without grade history. It does not print learner IDs, save a model, contact Moodle/Ollama, infer a historical snapshot from current grades, or establish readiness for real grading decisions. Keep manifests and outcomes in a private local directory. Different offerings and the same number of prerequisites do not prove pedagogical equivalence; select the inputs before evaluation.
+
 ## DuckDB Schema and Table Grains
 
 Every table is keyed and scoped by `snapshot_id` so multiple point-in-time exports can coexist in the same database without overwriting prior observations:
